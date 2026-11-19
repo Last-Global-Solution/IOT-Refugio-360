@@ -1,328 +1,232 @@
-# Refúgio 360 — API
+# Refúgio 360 — API & Integração IoT / IA
 
-API REST do **Refúgio 360**, solução CitizenTech para apoiar comunidades durante ondas de calor, enchentes e falta de energia. O serviço cadastra locais seguros, recebe ocorrências, mapeia pontos de risco e gera orientações contextualizadas para cidadãos e gestores.
+API REST do **Refúgio 360**, plataforma CitizenTech e IoT desenvolvida para apoiar comunidades em eventos climáticos críticos — como ondas de calor, enchentes e quedas de energia. O serviço centraliza o cadastro de abrigos e locais seguros, recebe ocorrências e alertas monitorados, mapeia áreas de risco e gera orientações personalizadas em tempo real utilizando Inteligência Artificial generativa.
 
-O projeto foi organizado no estilo do OlliPet: este README explica onde cada responsabilidade fica, como o app se autentica, quais rotas existem e como executar a API localmente.
+---
 
-## Links:
-| Tipo | Endereço |
-|---|---|
-| Swagger UI on Render | https://java-refugio360.onrender.com/swagger-ui/index.html |
-| Deploy on Render (web service) | https://java-refugio360.onrender.com |
-| Vídeo Pitch | http://localhost:8080/h2-console |
-
-## Como os dados e a autenticação funcionam
-
-O front usa Firebase Authentication para cadastro e login. A API valida o ID token emitido pelo Firebase e mantém no H2 o perfil do usuário e os dados do domínio.
-
-| Responsabilidade | Onde fica |
-|---|---|
-| Cadastro e login no aplicativo | Firebase Authentication |
-| Validação do token e perfil `CIDADAO`/`GESTOR` | API Java com Spring Security |
-| Locais seguros, ocorrências e pontos de risco | API Java + H2 |
-| Orientações personalizadas | API Java + Spring AI/Gemini (com alternativa local) |
-| Geração assíncrona das orientações | RabbitMQ (evento `OcorrenciaRegistrada`) |
-
-**Repositório Mobile (app que consome esta API):** _adicionar o link do repositório do app_
-
-O front não precisa guardar senha na API nem fazer um segundo login. Depois do login Firebase, envia o ID token no header `Authorization: Bearer <token>`.
-
-## Executar localmente
-
-Requisitos: **JDK 21** e **Docker** (para o RabbitMQ).
-
-1. Suba o RabbitMQ:
-
-```bash
-docker compose up -d
-```
-
-2. Inicie a API.
-
-Linux ou macOS:
-
-```bash
-./mvnw spring-boot:run
-```
-
-Windows (PowerShell):
-
-```powershell
-.\mvnw.cmd spring-boot:run
-```
-
-Sem o RabbitMQ a API também sobe: as ocorrências são registradas normalmente, só a orientação automática não é gerada (ela continua disponível sob demanda em `POST /api/ai/ocorrencias/{id}/orientacao`).
-
-Se o Java 21 não estiver como padrão, ajuste `JAVA_HOME` antes de iniciar:
-
-```powershell
-$env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'
-$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
-.\mvnw.cmd spring-boot:run
-```
-
-Quando o log indicar que a aplicação iniciou, os endereços locais são:
+## Links do Projeto
 
 | Recurso | Endereço |
 |---|---|
-| Swagger UI | http://localhost:8080/swagger-ui/index.html |
-| Definição OpenAPI | http://localhost:8080/v3/api-docs |
-| Console H2 (desenvolvimento) | http://localhost:8080/h2-console |
-| Painel do RabbitMQ | http://localhost:15672 (usuário `guest`, senha `guest`) |
+| **Swagger UI (Produção)** | https://java-refugio360.onrender.com/swagger-ui/index.html |
+| **API Deploy (Render)** | https://java-refugio360.onrender.com |
+| **Repositório GitHub** | https://github.com/Last-Global-Solution/IOT-Refugio-360 |
 
-No console H2, use JDBC URL `jdbc:h2:file:./data/refugio360;AUTO_SERVER=TRUE`, usuário `sa` e senha vazia. Os dados ficam na pasta `data/` e persistem entre reinicializações.
+---
 
-## Configuração
+## Arquitetura e Responsabilidades
 
-A aplicação inicia localmente sem Firebase ou chave Gemini. Defina as variáveis abaixo para integrar serviços externos e preparar outro ambiente:
+A aplicação combina autenticação híbrida (Firebase + JWT local), mensageria assíncrona com RabbitMQ e geração de recomendações contextualizadas via Spring AI (Google Gemini).
 
-| Variável | Uso | Padrão local |
+| Camada / Responsabilidade | Tecnologia |
+|---|---|
+| Cadastro e login no aplicativo | Firebase Authentication |
+| Validação de token e controle de acesso (`CIDADAO` / `GESTOR`) | Spring Security + JWT |
+| Persistência de locais seguros, ocorrências e pontos de risco | Spring Data JPA + H2 Database |
+| Orientações inteligentes por perfil de vulnerabilidade | Spring AI + Google Gemini (`gemini-3.5-flash-lite`) |
+| Processamento assíncrono de eventos de ocorrência | RabbitMQ (`OcorrenciaRegistrada`) |
+
+---
+
+## Como Executar Localmente
+
+### Pré-requisitos
+* **JDK 21**
+* **Docker** e **Docker Compose** (opcional, para mensageria com RabbitMQ)
+
+### Passo a passo
+
+1. **Suba o RabbitMQ via Docker:**
+   ```bash
+   docker compose up -d
+   ```
+
+2. **Inicie a aplicação Spring Boot:**
+
+   **Windows (PowerShell):**
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   **Linux / macOS:**
+   ```bash
+   ./mvnw spring-boot:run
+   ```
+
+   > **Nota:** Caso o RabbitMQ não esteja em execução, a API inicia normalmente e registra as ocorrências sem interrupções; apenas o disparo assíncrono fica inativo, mantendo disponível a geração sob demanda via `POST /api/ai/ocorrencias/{id}/orientacao`.
+
+   Se o Java 21 não for a versão padrão do sistema no Windows, configure o `JAVA_HOME` na sessão antes de rodar:
+   ```powershell
+   $env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'
+   $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+   .\mvnw.cmd spring-boot:run
+   ```
+
+### Endereços Locais
+
+| Serviço | URL | Credenciais / Observações |
 |---|---|---|
-| `FIREBASE_PROJECT_ID` | ID do projeto Firebase que emite os tokens aceitos | vazio (Firebase desabilitado) |
-| `GEMINI_API_KEY` | Chave da API Gemini usada pelo Spring AI | sem chave (orientação alternativa) |
-| `GEMINI_MODEL` | Modelo Gemini | `gemini-2.5-flash` |
-| `CORS_ALLOWED_ORIGINS` | Origens do front, separadas por vírgula | `http://localhost:3000,http://localhost:5173,http://localhost:8081` |
-| `DATABASE_URL` | URL JDBC do banco | H2 em arquivo `./data/refugio360` |
-| `GESTOR_EMAIL` | E-mail do gestor inicial | `gestor@refugio360.local` |
-| `GESTOR_PASSWORD` | Senha local do gestor inicial | `gestor12345` |
-| `JWT_SECRET` | Chave dos JWTs locais; use segredo aleatório com pelo menos 32 bytes fora do desenvolvimento | valor de desenvolvimento |
-| `RABBITMQ_HOST` / `RABBITMQ_PORT` | Endereço do RabbitMQ | `localhost` / `5672` |
-| `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | Credenciais do RabbitMQ | `guest` / `guest` |
+| **Swagger UI** | http://localhost:8080/swagger-ui/index.html | Documentação interativa |
+| **OpenAPI JSON** | http://localhost:8080/v3/api-docs | Especificação da API |
+| **Console H2** | http://localhost:8080/h2-console | JDBC: `jdbc:h2:file:./data/refugio360;AUTO_SERVER=TRUE` \| User: `sa` \| Senha: *(vazia)* |
+| **RabbitMQ Management** | http://localhost:15672 | User: `guest` \| Senha: `guest` |
 
-Exemplo no PowerShell:
+---
 
+## Variáveis de Ambiente
+
+A API funciona localmente com valores padrão seguros, mas permite configurar serviços externos via variáveis de ambiente:
+
+| Variável | Descrição | Padrão Local |
+|---|---|---|
+| `GEMINI_API_KEY` | Chave da API do Google AI Studio (Gemini) | `local-disabled-key` *(usa fallback local)* |
+| `GEMINI_MODEL` | Modelo Gemini utilizado pelo Spring AI | `gemini-3.5-flash-lite` |
+| `FIREBASE_PROJECT_ID` | ID do projeto Firebase para validação de ID Tokens | *(vazio — desabilitado)* |
+| `CORS_ALLOWED_ORIGINS` | Origens permitidas para o front-end | `http://localhost:3000,http://localhost:5173,http://localhost:8081` |
+| `DATABASE_URL` | URL JDBC do banco de dados | `jdbc:h2:file:./data/refugio360` |
+| `GESTOR_EMAIL` | E-mail do usuário gestor criado no bootstrap | `gestor@refugio360.local` |
+| `GESTOR_PASSWORD` | Senha inicial do gestor local | `gestor12345` |
+| `JWT_SECRET` | Chave de assinatura dos tokens JWT locais (mín. 32 bytes) | Chave padrão de desenvolvimento |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` | Host e porta do broker RabbitMQ | `localhost` / `5672` |
+| `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | Credenciais de acesso ao RabbitMQ | `guest` / `guest` |
+
+Exemplo de configuração no PowerShell antes de iniciar:
 ```powershell
-$env:FIREBASE_PROJECT_ID = 'id-do-projeto-firebase'
-$env:GEMINI_API_KEY = 'sua-chave-gemini'
-$env:CORS_ALLOWED_ORIGINS = 'http://localhost:3000,http://localhost:5173'
+$env:GEMINI_API_KEY = "sua-chave-google-ai-studio"
+$env:FIREBASE_PROJECT_ID = "seu-projeto-firebase"
 .\mvnw.cmd spring-boot:run
 ```
 
-O `FIREBASE_PROJECT_ID` precisa ser o mesmo configurado no app. O valor de CORS deve corresponder exatamente à origem usada pelo front.
+---
 
-## Autenticação
+## Autenticação e Perfis de Acesso
 
-### Integração com Firebase (fluxo do aplicativo)
+### 1. Fluxo Firebase (Aplicativo Mobile / Front-end)
+1. O usuário autentica-se via Firebase Authentication e obtém o token com `user.getIdToken()`.
+2. No primeiro acesso, o cliente chama `POST /api/auth/firebase` enviando `Authorization: Bearer <idToken>`. A API vincula ou cria o usuário localmente com papel `CIDADAO` (ou `GESTOR`, se o e-mail verificado coincidir com `GESTOR_EMAIL`).
+3. Nas requisições seguintes, basta enviar o mesmo header `Authorization: Bearer <idToken>`.
 
-1. O usuário cria a conta ou entra pelo Firebase Authentication.
-2. O front obtém o ID token atualizado com `user.getIdToken()`.
-3. Na primeira entrada, chama `POST /api/auth/firebase` com o token no header. A API cria o perfil local como `CIDADAO`, ou vincula um cadastro de gestor previamente configurado.
-4. Nas próximas chamadas protegidas, envia o ID token Firebase no mesmo header.
+### 2. Fluxo JWT Local (Insomnia / Swagger / Testes)
+* **Cadastro (`POST /api/auth/register`):**
+  ```json
+  {
+    "email": "cidadao@refugio360.local",
+    "senha": "senha-segura-123"
+  }
+  ```
+* **Login (`POST /api/auth/login`):**
+  ```json
+  {
+    "email": "gestor@refugio360.local",
+    "senha": "gestor12345"
+  }
+  ```
+  Retorna `accessToken` com validade de **1 hora**. No Swagger UI, clique em **Authorize** e cole apenas o valor do token.
 
-Exemplo no app (React Native + Expo):
+### Matriz de Permissões
 
-```ts
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-
-// Defina EXPO_PUBLIC_API_URL no .env do app. No celular, use o IP da máquina, não "localhost".
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8080";
-const { user } = await signInWithEmailAndPassword(getAuth(), email, senha);
-const idToken = await user.getIdToken();
-
-const resposta = await fetch(`${API_URL}/api/auth/firebase`, {
-  method: "POST",
-  headers: { Authorization: `Bearer ${idToken}` },
-});
-if (!resposta.ok) throw new Error("Não foi possível vincular a conta à API");
-const perfil = await resposta.json(); // { email, papel, firebaseUid }
-```
-
-Para chamar uma rota protegida depois do vínculo:
-
-```ts
-const token = await user.getIdToken();
-const resposta = await fetch(`${API_URL}/api/ocorrencias?page=0&size=10`, {
-  headers: { Authorization: `Bearer ${token}` },
-});
-const pagina = await resposta.json();
-```
-
-O papel não pode ser escolhido no app. Novos usuários Firebase viram `CIDADAO`. Para reconhecer um gestor pelo Firebase, configure `GESTOR_EMAIL` com o e-mail dele antes de iniciar a API; esse e-mail precisa estar verificado no Firebase. A senha inicial local não é utilizada no login pelo Firebase.
-
-### Login local para Swagger e desenvolvimento
-
-Para testar sem configurar Firebase, a API oferece cadastro e login locais. O cadastro público sempre cria um `CIDADAO`:
-
-```http
-POST /api/auth/register
-Content-Type: application/json
-
-{"email":"ana@example.com","senha":"senha-com-8-ou-mais"}
-```
-
-Faça login para receber um JWT local:
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{"email":"ana@example.com","senha":"senha-com-8-ou-mais"}
-```
-
-A resposta contém `accessToken`, `tokenType`, `expiresAt`, `email`, `papel` e `firebaseUid`. No Swagger, clique em **Authorize** e cole o valor de `accessToken` (sem escrever `Bearer`; o Swagger adiciona o prefixo). O token local expira em uma hora. O gestor de demonstração é criado ao iniciar, com os valores locais da tabela de configuração.
-
-## Perfis e acesso
-
-| Operação | Acesso |
+| Funcionalidade | Perfil Necessário |
 |---|---|
 | Consultar locais seguros e pontos de risco | Público |
-| Criar, editar e excluir locais seguros e pontos de risco | `GESTOR` |
-| Criar e consultar ocorrências | `CIDADAO` ou `GESTOR` |
-| Editar, excluir ou atualizar status de ocorrência | `GESTOR` |
-| Ver ou gerar orientação de uma ocorrência | Autor da ocorrência ou `GESTOR` |
-| Consultar o próprio perfil (`/api/auth/me`) | Usuário autenticado |
+| Cadastrar, editar e remover locais seguros e pontos de risco | `GESTOR` |
+| Registrar e listar ocorrências | `CIDADAO` ou `GESTOR` |
+| Alterar status, editar ou excluir ocorrências | `GESTOR` |
+| Visualizar ou solicitar orientação de IA para uma ocorrência | Autor da ocorrência ou `GESTOR` |
 
-## Endpoints
+---
 
-Todos os `GET` de coleção aceitam paginação Spring Data. Os parâmetros padrão são `page=0` e `size=10`; `page` começa em zero. Use `sort=campo,asc` ou `sort=campo,desc` para ordenar.
+## Endpoints Principais
 
-| Recurso | Método e rota | Acesso |
+Todas as listagens (`GET`) suportam paginação e ordenação via Spring Data (`?page=0&size=10&sort=campo,asc`).
+
+| Domínio | Método e Rota | Acesso |
 |---|---|---|
-| Autenticação | `POST /api/auth/register` | Público; cria cidadão local |
-| Autenticação | `POST /api/auth/login` | Público; login local |
-| Autenticação | `POST /api/auth/firebase` | Token Firebase válido |
-| Autenticação | `GET /api/auth/me` | Autenticado |
-| Locais seguros | `GET /api/locais-seguros`, `GET /api/locais-seguros/{id}` | Público |
-| Locais seguros | `POST /api/locais-seguros`, `PUT /api/locais-seguros/{id}`, `DELETE /api/locais-seguros/{id}` | `GESTOR` |
-| Ocorrências | `GET /api/ocorrencias`, `GET /api/ocorrencias/{id}`, `POST /api/ocorrencias` | Autenticado |
-| Ocorrências | `GET /api/ocorrencias/minhas` | Autenticado; só as do próprio usuário |
-| Ocorrências | `GET /api/ocorrencias/{id}/orientacoes` | Autor ou `GESTOR` |
-| Ocorrências | `PUT /api/ocorrencias/{id}`, `PATCH /api/ocorrencias/{id}/status`, `DELETE /api/ocorrencias/{id}` | `GESTOR` |
-| Pontos de risco | `GET /api/pontos-risco`, `GET /api/pontos-risco/{id}` | Público |
-| Pontos de risco | `POST /api/pontos-risco`, `PUT /api/pontos-risco/{id}`, `DELETE /api/pontos-risco/{id}` | `GESTOR` |
-| IA | `POST /api/ai/ocorrencias/{id}/orientacao?perfil=IDOSO` | Autor ou `GESTOR` |
+| **Auth** | `POST /api/auth/register` \| `POST /api/auth/login` | Público |
+| **Auth** | `POST /api/auth/firebase` \| `GET /api/auth/me` | Autenticado |
+| **Locais Seguros** | `GET /api/locais-seguros` \| `GET /api/locais-seguros/{id}` | Público |
+| **Locais Seguros** | `POST` \| `PUT` \| `DELETE /api/locais-seguros/{id}` | `GESTOR` |
+| **Ocorrências** | `GET /api/ocorrencias` \| `GET /api/ocorrencias/{id}` \| `POST /api/ocorrencias` | Autenticado |
+| **Ocorrências** | `GET /api/ocorrencias/minhas` | Autenticado (próprias) |
+| **Ocorrências** | `GET /api/ocorrencias/{id}/orientacoes` | Autor ou `GESTOR` |
+| **Ocorrências** | `PUT /api/ocorrencias/{id}` \| `PATCH /api/ocorrencias/{id}/status` \| `DELETE /api/ocorrencias/{id}` | `GESTOR` |
+| **Pontos de Risco** | `GET /api/pontos-risco` \| `GET /api/pontos-risco/{id}` | Público |
+| **Pontos de Risco** | `POST` \| `PUT` \| `DELETE /api/pontos-risco/{id}` | `GESTOR` |
+| **Inteligência Artificial** | `POST /api/ai/ocorrencias/{id}/orientacao?perfil=IDOSO` | Autor ou `GESTOR` |
 
-### Exemplos de corpos
+### Exemplos de Payload
 
-Criar local seguro (`POST /api/locais-seguros`, gestor):
-
+**Registrar Ocorrência (`POST /api/ocorrencias`):**
 ```json
 {
-  "nome": "Abrigo Central",
-  "tipo": "ABRIGO",
-  "endereco": "Rua A, 100",
-  "latitude": -23.55,
-  "longitude": -46.63,
-  "descricao": "Entrada acessível"
-}
-```
-
-Registrar ocorrência (`POST /api/ocorrencias`, cidadão ou gestor):
-
-```json
-{
-  "descricao": "Alagamento na avenida",
-  "urgencia": "ALTA",
-  "latitude": -23.55,
-  "longitude": -46.63,
+  "descricao": "Alagamento severo próximo à avenida principal com risco de isolamento",
+  "urgencia": "CRITICA",
+  "latitude": -23.5841,
+  "longitude": -46.5829,
   "perfil": "IDOSO"
 }
 ```
+* **Urgências aceitas:** `BAIXA`, `MEDIA`, `ALTA`, `CRITICA`
+* **Perfis de orientação:** `GERAL`, `IDOSO`, `PCD`, `FAMILIA`
+* **Ciclo de status:** `PENDENTE` → `EM_ANALISE` → `RESOLVIDA`
 
-`perfil` é opcional (`GERAL`, `IDOSO`, `PCD` ou `FAMILIA`) e define para quem a orientação automática é escrita.
-
-Atualizar status (`PATCH /api/ocorrencias/{id}/status`, gestor):
-
-```json
-{"status":"EM_ANALISE"}
-```
-
-Criar ponto de risco (`POST /api/pontos-risco`, gestor):
-
+**Cadastrar Local Seguro (`POST /api/locais-seguros`):**
 ```json
 {
-  "titulo": "Área sujeita a alagamento",
-  "nivelPerigo": "ALTO",
-  "latitude": -23.55,
-  "longitude": -46.63
+  "nome": "UBS Vila Prudente - Ponto de Apoio",
+  "tipo": "ABRIGO",
+  "endereco": "Av. Professor Luiz Ignácio Anhaia Mello, 1200",
+  "latitude": -23.5845,
+  "longitude": -46.5832,
+  "descricao": "Ponto de hidratação, energia de emergência e acesso para cadeirantes"
 }
 ```
 
-O status segue um ciclo fixo: `PENDENTE` → `EM_ANALISE` → `RESOLVIDA` (também é possível resolver direto de `PENDENTE`, ou devolver `EM_ANALISE` para `PENDENTE`). Uma ocorrência `RESOLVIDA` não reabre; qualquer outra transição retorna `409`.
+---
 
-Urgências aceitas para ocorrências: `BAIXA`, `MEDIA`, `ALTA` e `CRITICA`. Níveis de perigo aceitos: `BAIXO`, `MODERADO`, `ALTO` e `CRITICO`. Latitude e longitude devem estar dentro dos limites geográficos válidos.
-
-## Orientações com IA e RabbitMQ
-
-O cidadão não precisa pedir a orientação: ela é gerada assim que o relato é registrado, sem travar a resposta do app.
+## Fluxo Assíncrono (RabbitMQ + Spring AI)
 
 ```text
-App ──POST /api/ocorrencias──▶ API grava a ocorrência ──(após o commit)──▶ RabbitMQ
-                                                                            │  exchange refugio360.eventos
-                                                                            │  fila refugio360.ocorrencias.orientacao
-                                                                            ▼
-                                     OrientacaoListener ──▶ Spring AI (Gemini) ──▶ grava a Orientacao
-App ──GET /api/ocorrencias/{id}/orientacoes──▶ lê a orientação gerada
+App / Sensor ──POST /api/ocorrencias──▶ API salva no H2 ──(após commit)──▶ RabbitMQ
+                                                                              │ exchange: refugio360.eventos
+                                                                              │ fila: refugio360.ocorrencias.orientacao
+                                                                              ▼
+                                             OrientacaoListener ──▶ Gemini AI ──▶ Persiste Orientacao
 ```
 
-1. `POST /api/ocorrencias` grava o relato ligado ao autor e devolve `201` na hora.
-2. Depois do commit, a API publica o evento `OcorrenciaRegistrada` no RabbitMQ.
-3. O consumidor (`OrientacaoListener`) chama o Spring AI com o relato, a urgência, o perfil e os três locais seguros mais próximos, e grava o resultado na entidade `Orientacao`.
-4. O app busca a orientação em `GET /api/ocorrencias/{id}/orientacoes`.
+1. Ao receber uma ocorrência, a API grava os dados e publica o evento `OcorrenciaRegistrada` na exchange `refugio360.eventos`.
+2. O consumidor `OrientacaoListener` cruza a localização da ocorrência com os **3 locais seguros mais próximos** e aciona o Spring AI (`gemini-3.5-flash-lite`) adaptado ao `perfil` informado.
+3. O resultado é salvo com `"geradoPorIA": true` e os IDs em `locaisConsiderados`. Em caso de indisponibilidade externa, o sistema garante continuidade operacional com orientação estruturada local (`"geradoPorIA": false`).
 
-`POST /api/ai/ocorrencias/{id}/orientacao?perfil=IDOSO` gera uma nova orientação na hora, por exemplo para outro público. O texto muda conforme o perfil: frases curtas e passos numerados para `IDOSO`, trajetos acessíveis para `PCD` e cuidados com crianças para `FAMILIA`.
+---
 
-Com `GEMINI_API_KEY` configurada, a resposta pode ser gerada pelo Gemini. Sem chave ou se o provedor estiver indisponível, a API retorna uma orientação local e informa `geradoPorIA: false`. A resposta também inclui `locaisConsiderados` com os IDs dos locais usados como contexto. A IA não confirma horário, capacidade ou disponibilidade dos locais; valide essas informações antes do deslocamento.
-
-## Paginação e erros
-
-Exemplo de listagem paginada:
-
-```http
-GET /api/locais-seguros?page=0&size=10&sort=nome,asc
-```
-
-As respostas de coleção seguem o formato de página do Spring Data, com conteúdo em `content` e informações como `totalElements`, `totalPages`, `number` e `size`.
-
-Erros são retornados em JSON padronizado. Erro de validação inclui um mapa `fields` com os campos que precisam de correção:
-
-```json
-{
-  "timestamp": "2026-11-11T20:00:00Z",
-  "status": 400,
-  "error": "Bad Request",
-  "message": "Revise os campos enviados",
-  "path": "/api/ocorrencias",
-  "fields": {"latitude": "deve ser maior ou igual a -90.0"}
-}
-```
-
-`401` indica token ausente ou inválido; `403` indica perfil sem permissão; `404` indica recurso não encontrado; `409` indica conflito, como e-mail já cadastrado.
-
-## Organização do código
+## Estrutura do Projeto
 
 ```text
 src/main/java/org/fiap/gs_final/
-  controller/  endpoints REST e contratos HTTP
-  service/     regras de negócio e autenticação
-  repository/  persistência com Spring Data JPA
-  model/       entidades persistidas no H2
-  dto/         contratos de entrada e validações
-  security/    Firebase, JWT local, perfis e CORS
-  exception/   formato global de erros da API
-  ai/          geração de orientações com Spring AI
-  mensageria/  RabbitMQ: evento, publicação e consumidor
-  config/      Swagger/OpenAPI e paginação
+├── ai/          # Integração com Spring AI, prompts e fallback de orientações
+├── config/      # Configurações de OpenAPI/Swagger, paginação e cliente HTTP (HttpClientConfig)
+├── controller/  # Controladores REST e documentação de rotas
+├── dto/         # Objetos de transferência e validações Bean Validation
+├── exception/   # Tratamento global de exceções e respostas padronizadas
+├── mensageria/  # Configuração de filas, producer e consumer RabbitMQ
+├── model/       # Entidades JPA (Usuario, Ocorrencia, Orientacao, LocalSeguro, PontoRisco)
+├── repository/  # Interfaces Spring Data JPA
+├── security/    # Filtros JWT, validação Firebase, CORS e regras de acesso
+└── service/     # Regras de negócio e cálculos de proximidade
 ```
 
-## Modelo de dados
-
-| Entidade | Relacionamentos |
-|---|---|
-| `Usuario` | autor de várias `Ocorrencia` |
-| `Ocorrencia` | `@ManyToOne` autor (`Usuario`); `@OneToMany` orientações (removidas junto) |
-| `Orientacao` | `@ManyToOne` ocorrência; `@ManyToMany` locais seguros considerados |
-| `LocalSeguro` | citado por várias `Orientacao` |
-| `PontoRisco` | áreas de risco cadastradas pelo gestor |
+---
 
 ## Equipe
 
-- Gabriely Bonfim Silva — RM566242
-- Henrique Rodrigues Vespasiano — RM562917
-- Mirelly Sousa Alves — RM566299
-- Ruan Luca Feliciano — RM562218
-- Murilo Macedo Silva — RM566462
+* **Gabriely Bonfim Silva** — RM566242
+* **Henrique Rodrigues Vespasiano** — RM562917
+* **Mirelly Sousa Alves** — RM566299
+* **Ruan Luca Feliciano** — RM562218
+* **Murilo Macedo Silva** — RM566462
 
-## Tecnologias
+---
 
-Java 21 · Spring Boot 3.4 · Spring Web · Spring Security · Spring Data JPA · H2 · Spring AI · Gemini · RabbitMQ (Spring AMQP) · Docker Compose · Firebase Authentication · Swagger/OpenAPI · Maven
+## Tecnologias Utilizadas
+
+Java 21 · Spring Boot 3.4 · Spring Web · Spring Security · Spring Data JPA · H2 Database · Spring AI · Google Gemini · RabbitMQ (Spring AMQP) · Docker Compose · Firebase Authentication · Swagger / OpenAPI 3 · Maven
