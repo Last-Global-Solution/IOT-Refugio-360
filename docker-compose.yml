@@ -1,0 +1,13 @@
+# Sobe o RabbitMQ usado pela API. Painel em http://localhost:15672 (guest/guest).
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: refugio360-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

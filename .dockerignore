@@ -1,0 +1,11 @@
+.git
+.idea
+.vscode
+data
+out
+target
+build
+*.iml
+.env
+.env.*
+serviceAccount*.json
